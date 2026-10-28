@@ -1,0 +1,16 @@
+[project]
+name = "crypto-trades-lakehouse"
+version = "0.1.0"
+description = "Crypto trades lakehouse: Spark Structured Streaming + Delta Lake portfolio project"
+requires-python = "==3.14.*"
+dependencies = []
+
+[dependency-groups]
+# One group per Dockerfile target; each image installs only its own group.
+ingestion = []
+# delta-spark 4.4.1 is built for Spark 4.2.0. Its version must match the
+# Maven coordinate in the Dockerfile's spark-defaults.conf.
+processing = [
+    "pyspark==4.2.0",
+    "delta-spark==4.4.1",
+]

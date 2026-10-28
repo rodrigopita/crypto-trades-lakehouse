@@ -1,0 +1,7 @@
+# Runtime data and local tooling stay out of the build context.
+data/
+.git/
+.venv/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
