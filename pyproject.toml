@@ -6,11 +6,21 @@ requires-python = "==3.14.*"
 dependencies = []
 
 [dependency-groups]
-# One group per Dockerfile target; each image installs only its own group.
-ingestion = []
+# One group per Dockerfile target plus a dev group; each image installs only its own group.
+dev = [
+    "pytest>=9",
+    "ruff>=0.16",
+]
+
+ingestion = [
+    "websockets==17.3",
+]
 # delta-spark 4.4.1 is built for Spark 4.2.0. Its version must match the
 # Maven coordinate in the Dockerfile's spark-defaults.conf.
 processing = [
     "pyspark==4.2.0",
     "delta-spark==4.4.1",
 ]
+
+[tool.ruff]
+line-length = 100
