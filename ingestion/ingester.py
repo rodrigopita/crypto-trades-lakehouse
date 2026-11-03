@@ -1,12 +1,13 @@
 import json
 import logging
-from datetime import UTC, datetime
+import signal
 
 from websockets.sync.client import connect
 
-logger = logging.getLogger(__name__)
+from .landing import TradesBatch, iso_utc, utc_now
+from .settings import Settings
 
-URI = "wss://ws.kraken.com/v2"
+logger = logging.getLogger(__name__)
 
 
 class KrakenError(Exception):
@@ -23,6 +24,10 @@ class SubscriptionPermanentError(KrakenError):
     """
 
 
+def _stop(signum, frame):
+    raise SystemExit(0)
+
+
 def get_trade_message(message: str, received_time: str) -> dict | None:
     parsed_message = json.loads(message)
     if parsed_message.get("channel") == "trade":
@@ -34,8 +39,22 @@ def get_trade_message(message: str, received_time: str) -> dict | None:
 
 
 def main():
-    with connect(uri=URI) as websocket:
-        print(f"Connected to {websocket}.")
+    signal.signal(signal.SIGTERM, _stop)
+    logging.basicConfig(
+        format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.INFO,
+    )
+
+    settings = Settings()
+    trades_batch = TradesBatch(
+        settings.landing_folder,
+        settings.tmp_folder,
+        settings.record_folder,
+    )
+
+    with connect(uri=settings.uri) as websocket:
+        logger.info(f"Connected to {settings.uri}.")
         payload = json.dumps(
             {
                 "method": "subscribe",
@@ -47,14 +66,21 @@ def main():
             }
         )
         websocket.send(payload)
-        for message in websocket:
-            received_time = (
-                datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
-            )
-            trade_message = get_trade_message(message, received_time)
-            if not trade_message:
-                continue
-            print(json.dumps(trade_message, indent=4))
+        try:
+            for message in websocket:
+                received_time = iso_utc(utc_now())
+                trade_message = get_trade_message(message, received_time)
+                if trades_batch.is_due():
+                    logger.info("Batch is due. Flushing messages...")
+                    trades_batch.flush()
+                if not trade_message:
+                    continue
+                trades_batch.add(trade_message)
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received.")
+        finally:
+            logger.info("Stopping, flushing the open batch...")
+            trades_batch.flush()
 
 
 if __name__ == "__main__":

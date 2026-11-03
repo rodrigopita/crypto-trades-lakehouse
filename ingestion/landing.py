@@ -1,9 +1,11 @@
 import json
+import logging
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 Clock = Callable[[], datetime]
+logger = logging.getLogger(__name__)
 
 
 def utc_now() -> datetime:
@@ -41,7 +43,9 @@ class TradesBatch:
     def add(self, message: dict):
         if not self.messages:
             self.opened_at = self._clock()
+            logger.info(f"Opened new batch at {iso_utc(self.opened_at)}.")
         self.messages.append(message)
+        logger.debug(f"Added message to batch. Total messages: {len(self.messages)}.")
 
     def is_due(self) -> bool:
         if self.messages:
@@ -59,7 +63,9 @@ class TradesBatch:
         tmp_file = save_to_temp(ref_opened_at, self.messages, self.tmp_folder)
         landed_file = landing_path(ref_opened_at, self.landing_folder)
         os.replace(tmp_file, landed_file)
-        log_written_record(
+        logger.debug(f"Flushed batch to landing file: {landed_file}.")
+
+        written_record = log_written_record(
             iso_utc(self.opened_at),
             iso_utc(self._clock()),
             os.path.basename(landed_file),
@@ -67,6 +73,11 @@ class TradesBatch:
             self.record_folder,
         )
         self.messages = []
+        logger.info(
+            f"Cleared batch after flushing at {written_record['written_at']} with"
+            f" {written_record['message_count']} messages and {written_record['trade_count']}"
+            " trades."
+        )
 
 
 def landing_path(ref_opened_at: str, dst_folder: str) -> str:
@@ -79,6 +90,7 @@ def save_to_temp(ref_opened_at: str, trade_messages: list[dict], tmp_folder: str
         for trade_message in trade_messages:
             message = json.dumps(trade_message) + "\n"
             f.write(message)
+    logger.debug(f"Saved {len(trade_messages)} messages to temporary file: {filename}.")
     return filename
 
 
@@ -88,7 +100,7 @@ def log_written_record(
     filename: str,
     trade_messages: list[dict],
     record_folder: str,
-):
+) -> dict:
     trade_ids = [trade["trade_id"] for msg in trade_messages for trade in msg.get("data", [])]
     written_record = {
         "opened_at": ref_opened_at,
@@ -102,3 +114,5 @@ def log_written_record(
     record_path = f"{record_folder}/written.jsonl"
     with open(record_path, "a") as f:
         f.write(json.dumps(written_record) + "\n")
+    logger.debug(f"Logged written record to {record_path}: {written_record}.")
+    return written_record
