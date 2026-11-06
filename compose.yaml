@@ -1,0 +1,9 @@
+services:
+  ingester:
+    build:
+      context: .
+      target: ingestion
+    command: python -m ingestion.ingester
+    volumes:
+      - ./data:/app/data
+    restart: "no"
