@@ -7,3 +7,12 @@ services:
     volumes:
       - ./data:/app/data
     restart: "no"
+
+  processor:
+    build:
+      context: .
+      target: processing
+    command: python -m processing.main
+    volumes:
+      - ./data:/app/data
+    restart: "no"

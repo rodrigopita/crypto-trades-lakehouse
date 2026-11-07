@@ -19,8 +19,9 @@ ingestion = [
 # delta-spark 4.4.1 is built for Spark 4.2.0. Its version must match the
 # Maven coordinate in the Dockerfile's spark-defaults.conf.
 processing = [
-    "pyspark==4.2.0",
     "delta-spark==4.4.1",
+    "pydantic-settings==2.16.2",
+    "pyspark==4.2.0",
 ]
 
 [tool.ruff]
