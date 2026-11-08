@@ -1,12 +1,8 @@
-from pydantic_settings import BaseSettings
+from shared.layout import DataLayout
 
 
-class Settings(BaseSettings):
+class IngesterSettings(DataLayout):
     uri: str = "wss://ws.kraken.com/v2"
-
-    landing_folder: str = "data/landing"
-    tmp_folder: str = "data/tmp"
-    record_folder: str = "data/record"
 
     close_timeout: int = 5
     stall_timeout: int = 5

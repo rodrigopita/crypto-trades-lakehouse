@@ -26,6 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     uv sync --locked --only-group ingestion
+COPY shared/ shared/
 COPY ingestion/ ingestion/
 USER app
 
@@ -51,5 +52,6 @@ EOF
 RUN mkdir /opt/spark/ivy && chown app:app /opt/spark/ivy
 USER app
 RUN python -c "from pyspark.sql import SparkSession; SparkSession.builder.getOrCreate().stop()"
+COPY shared/ shared/
 COPY processing/ processing/
 COPY reconciliation/ reconciliation/

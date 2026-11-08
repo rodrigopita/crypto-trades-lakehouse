@@ -3,7 +3,7 @@ import logging
 from pyspark.sql import SparkSession
 
 from .bronze import start_bronze_query
-from .settings import Settings
+from .settings import ProcessingSettings
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S",
         level=logging.INFO,
     )
-    settings = Settings()
+    settings = ProcessingSettings()
 
     logger.info("Starting Spark session...")
     spark = SparkSession.builder.appName("CryptoTradesLakehouse").getOrCreate()

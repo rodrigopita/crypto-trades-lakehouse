@@ -8,7 +8,7 @@ from websockets.exceptions import ConnectionClosed, InvalidHandshake
 from websockets.sync.client import ClientConnection, connect
 
 from .landing import TradesBatch, iso_utc, utc_now
-from .settings import Settings
+from .settings import IngesterSettings
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def receive_trades(
         trades_batch.add(trade_message)
 
 
-def ingest_with_reconnects(settings: Settings, trades_batch: TradesBatch):
+def ingest_with_reconnects(settings: IngesterSettings, trades_batch: TradesBatch):
     backoff = Backoff()
     while True:
         try:
@@ -99,11 +99,11 @@ def main():
         level=logging.INFO,
     )
 
-    settings = Settings()
+    settings = IngesterSettings()
     trades_batch = TradesBatch(
-        settings.landing_folder,
-        settings.tmp_folder,
-        settings.record_folder,
+        settings.landing_folder(),
+        settings.tmp_folder(),
+        settings.record_path(),
     )
 
     try:

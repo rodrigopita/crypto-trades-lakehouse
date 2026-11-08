@@ -1,8 +1,9 @@
 import logging
 
-from pyspark.sql import SparkSession, StreamingQuery
+from pyspark.sql import SparkSession
+from pyspark.sql.streaming import StreamingQuery
 
-from .settings import Settings
+from .settings import ProcessingSettings
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,8 @@ TRADE_SCHEMA = (
 LANDING_SCHEMA = f"channel STRING, type STRING, data ARRAY<{TRADE_SCHEMA}>, received_time STRING"
 
 
-def start_bronze_query(spark: SparkSession, settings: Settings) -> StreamingQuery:
-    landing_folder = settings.landing_path()
+def start_bronze_query(spark: SparkSession, settings: ProcessingSettings) -> StreamingQuery:
+    landing_folder = settings.landing_folder()
     table_path = settings.table_path(LAYER, TABLE)
     checkpoint_folder = settings.checkpoint_path(LAYER, TABLE)
 
