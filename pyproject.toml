@@ -24,5 +24,8 @@ processing = [
     "pyspark==4.2.0",
 ]
 
+[tool.uv]
+default-groups = "all"
+
 [tool.ruff]
 line-length = 100
