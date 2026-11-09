@@ -40,12 +40,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     uv sync --locked --only-group processing
 # Every Spark session in this image gets Delta. The coordinate's version must
-# match delta-spark in pyproject.toml.
+# match delta-spark in pyproject.toml. Console progress bars are off because
+# they print on the same lines as the application's log messages.
 COPY <<EOF $SPARK_CONF_DIR/spark-defaults.conf
 spark.jars.packages              io.delta:delta-spark_4.2_2.13:4.4.1
 spark.jars.ivy                   /opt/spark/ivy
 spark.sql.extensions             io.delta.sql.DeltaSparkSessionExtension
 spark.sql.catalog.spark_catalog  org.apache.spark.sql.delta.catalog.DeltaCatalog
+spark.ui.showConsoleProgress     false
 EOF
 # Spark downloads Delta's jars from Maven when a session starts. Starting one
 # here fills the Ivy cache at build time, so containers start without Maven.
