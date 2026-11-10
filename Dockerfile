@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.27.1
 
 # Versions pinned together, checked 2026-10-25:
 # - Python 3.14.9 on Debian 13 (trixie).
@@ -6,6 +6,7 @@
 # - pyspark 4.2.0 and delta-spark 4.4.1, pinned in pyproject.toml. Delta 4.4.1
 #   is built for Spark 4.2.0 (GitHub release notes; the docs table stops at 4.3).
 # - uv 0.10.9, the same version as on the host, so both read the same uv.lock.
+# - Dockerfile frontend 1.27.1, what docker/dockerfile:1 pointed to on 2026-11-10.
 
 FROM python:3.14.9-slim-trixie AS base
 COPY --from=ghcr.io/astral-sh/uv:0.10.9 /uv /bin/uv
