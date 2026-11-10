@@ -101,13 +101,15 @@ def log_written_record(
     trade_messages: list[dict],
     record_path: str,
 ) -> dict:
-    trade_ids = [trade["trade_id"] for msg in trade_messages for trade in msg.get("data", [])]
+    # A trade without a trade_id still counts as a trade; Silver rejects it, the record keeps it.
+    trades = [trade for msg in trade_messages for trade in msg.get("data", [])]
+    trade_ids = [trade["trade_id"] for trade in trades if trade.get("trade_id") is not None]
     written_record = {
         "opened_at": ref_opened_at,
         "written_at": ref_written_at,
         "filename": filename,
         "message_count": len(trade_messages),
-        "trade_count": len(trade_ids),
+        "trade_count": len(trades),
         "min_trade_id": min(trade_ids, default=None),
         "max_trade_id": max(trade_ids, default=None),
     }
