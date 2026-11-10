@@ -25,7 +25,9 @@ class ReconciliationError(Exception): ...
 
 def get_bronze_counts(spark: SparkSession, settings: ProcessingSettings) -> dict:
     bronze_df = spark.read.format("delta").load(settings.table_path(LAYER, TABLE))
-    trades = bronze_df.select(F.explode("data").alias("trade")).select("trade.trade_id")
+    trades = bronze_df.select(F.explode("data").alias("trade")).select(
+        F.col("trade.trade_id").try_cast("bigint").alias("trade_id")
+    )
 
     trade_counts = trades.agg(
         F.count("*").alias("trade_count"),

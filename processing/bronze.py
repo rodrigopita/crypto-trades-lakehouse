@@ -13,10 +13,10 @@ TABLE = "trade_messages"
 TRADE_SCHEMA = (
     "STRUCT<symbol STRING, "
     "side STRING, "
-    "price DOUBLE, "
-    "qty DOUBLE, "
+    "price STRING, "
+    "qty STRING, "
     "ord_type STRING, "
-    "trade_id BIGINT, "
+    "trade_id STRING, "
     "timestamp STRING>"
 )
 LANDING_SCHEMA = f"channel STRING, type STRING, data ARRAY<{TRADE_SCHEMA}>, received_time STRING"
