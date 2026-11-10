@@ -7,6 +7,8 @@ from collections.abc import Callable
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 from websockets.sync.client import ClientConnection, connect
 
+from shared.logs import configure_logging
+
 from .landing import TradesBatch, iso_utc, utc_now
 from .settings import IngesterSettings
 
@@ -93,11 +95,7 @@ def ingest_with_reconnects(settings: IngesterSettings, trades_batch: TradesBatch
 
 def main():
     signal.signal(signal.SIGTERM, _stop)
-    logging.basicConfig(
-        format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO,
-    )
+    configure_logging()
 
     settings = IngesterSettings()
     trades_batch = TradesBatch(

@@ -2,6 +2,8 @@ import logging
 
 from pyspark.sql import SparkSession
 
+from shared.logs import configure_logging
+
 from .bronze import start_bronze_query
 from .settings import ProcessingSettings
 
@@ -9,11 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    logging.basicConfig(
-        format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO,
-    )
+    configure_logging()
     settings = ProcessingSettings()
 
     logger.info("Starting Spark session...")

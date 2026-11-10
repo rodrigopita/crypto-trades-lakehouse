@@ -5,6 +5,7 @@ from pyspark.sql import functions as F
 
 from processing.bronze import LAYER, TABLE
 from processing.settings import ProcessingSettings
+from shared.logs import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +71,7 @@ def log_trade_id_coverage(bronze_counts: dict) -> None:
 
 
 def main():
-    logging.basicConfig(
-        format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO,
-    )
+    configure_logging()
     settings = ProcessingSettings()
 
     logger.info("Starting Spark session...")
