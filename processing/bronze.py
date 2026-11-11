@@ -1,4 +1,5 @@
 import logging
+import os
 
 from pyspark.sql import SparkSession
 from pyspark.sql.streaming import StreamingQuery
@@ -26,6 +27,9 @@ def start_bronze_query(spark: SparkSession, settings: ProcessingSettings) -> Str
     landing_folder = settings.landing_folder()
     table_path = settings.table_path(LAYER, TABLE)
     checkpoint_folder = settings.checkpoint_path(LAYER, TABLE)
+
+    os.makedirs(landing_folder, exist_ok=True)
+    spark.createDataFrame([], LANDING_SCHEMA).write.format("delta").mode("ignore").save(table_path)
 
     landing_stream = spark.readStream.format("json").schema(LANDING_SCHEMA).load(landing_folder)
     query = (
