@@ -45,10 +45,14 @@ def start_silver_queries(
         .when(F.col("event_time").isNull(), "malformed timestamp")
     )
     checked = trades.withColumn("reject_reason", reject_reason)
+    deduplicated = (
+        checked.filter(F.col("reject_reason").isNull())
+        .withWatermark("event_time", settings.watermark_threshold)
+        .dropDuplicatesWithinWatermark(["trade_id"])
+    )
 
     trades_query = (
-        checked.filter(F.col("reject_reason").isNull())
-        .select(
+        deduplicated.select(
             "symbol",
             "side",
             "price",
