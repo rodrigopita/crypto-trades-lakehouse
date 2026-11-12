@@ -5,6 +5,7 @@ from pyspark.sql import functions as F
 
 from processing.bronze import LAYER, TABLE
 from processing.settings import ProcessingSettings
+from reconciliation.checks import ReconciliationError
 from shared.logs import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -20,9 +21,6 @@ RECORD_SCHEMA = (
 )
 
 
-class ReconciliationError(Exception): ...
-
-
 def get_bronze_counts(spark: SparkSession, settings: ProcessingSettings) -> dict:
     bronze_df = spark.read.format("delta").load(settings.table_path(LAYER, TABLE))
     trades = bronze_df.select(F.explode("data").alias("trade")).select(
@@ -32,6 +30,7 @@ def get_bronze_counts(spark: SparkSession, settings: ProcessingSettings) -> dict
     trade_counts = trades.agg(
         F.count("*").alias("trade_count"),
         F.count_distinct("trade_id").alias("distinct_trade_count"),
+        F.count("trade_id").alias("trade_id_count"),
         F.min("trade_id").alias("min_trade_id"),
         F.max("trade_id").alias("max_trade_id"),
     ).first()
@@ -65,7 +64,7 @@ def log_trade_id_coverage(bronze_counts: dict) -> None:
         logger.info("Bronze has no trades; no trade id coverage to report.")
         return
     distinct = bronze_counts["distinct_trade_count"]
-    repeated = bronze_counts["trade_count"] - distinct
+    repeated = bronze_counts["trade_id_count"] - distinct
     id_range = bronze_counts["max_trade_id"] - bronze_counts["min_trade_id"] + 1
     missing = id_range - distinct
     logger.info(f"Distinct trade ids: {distinct}, repeated: {repeated} (snapshot replays).")
