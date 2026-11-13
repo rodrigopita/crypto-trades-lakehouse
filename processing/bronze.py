@@ -26,7 +26,7 @@ LANDING_SCHEMA = f"channel STRING, type STRING, data ARRAY<{TRADE_SCHEMA}>, rece
 def start_bronze_query(spark: SparkSession, settings: ProcessingSettings) -> StreamingQuery:
     landing_folder = settings.landing_folder()
     table_path = settings.table_path(LAYER, TABLE)
-    checkpoint_folder = settings.checkpoint_path(LAYER, TABLE)
+    query_checkpoint_path = settings.query_checkpoint_path(LAYER, TABLE)
 
     os.makedirs(landing_folder, exist_ok=True)
     spark.createDataFrame([], LANDING_SCHEMA).write.format("delta").mode("ignore").save(table_path)
@@ -35,7 +35,7 @@ def start_bronze_query(spark: SparkSession, settings: ProcessingSettings) -> Str
     query = (
         landing_stream.writeStream.outputMode("append")
         .format("delta")
-        .option("checkpointLocation", checkpoint_folder)
+        .option("checkpointLocation", query_checkpoint_path)
         .start(table_path)
     )
     return query

@@ -16,8 +16,8 @@ def start_silver_queries(
 ) -> tuple[StreamingQuery, StreamingQuery]:
     trades_table_path = settings.table_path(LAYER, TABLE)
     rejects_table_path = settings.table_path(LAYER, REJECTS_TABLE)
-    trades_checkpoint_folder = settings.checkpoint_path(LAYER, TABLE)
-    rejects_checkpoint_folder = settings.checkpoint_path(LAYER, REJECTS_TABLE)
+    trades_query_checkpoint_path = settings.query_checkpoint_path(LAYER, TABLE)
+    rejects_query_checkpoint_path = settings.query_checkpoint_path(LAYER, REJECTS_TABLE)
 
     bronze_stream = spark.readStream.format("delta").load(
         settings.table_path(bronze.LAYER, bronze.TABLE)
@@ -64,7 +64,7 @@ def start_silver_queries(
         )
         .writeStream.outputMode("append")
         .format("delta")
-        .option("checkpointLocation", trades_checkpoint_folder)
+        .option("checkpointLocation", trades_query_checkpoint_path)
         .start(trades_table_path)
     )
 
@@ -77,7 +77,7 @@ def start_silver_queries(
         )
         .writeStream.outputMode("append")
         .format("delta")
-        .option("checkpointLocation", rejects_checkpoint_folder)
+        .option("checkpointLocation", rejects_query_checkpoint_path)
         .start(rejects_table_path)
     )
     return trades_query, rejects_query

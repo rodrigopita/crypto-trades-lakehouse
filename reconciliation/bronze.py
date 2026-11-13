@@ -64,11 +64,11 @@ def log_trade_id_coverage(bronze_counts: dict) -> None:
         logger.info("Bronze has no trades; no trade id coverage to report.")
         return
     distinct = bronze_counts["distinct_trade_count"]
-    repeated = bronze_counts["trade_id_count"] - distinct
+    duplicates = bronze_counts["trade_id_count"] - distinct
     id_range = bronze_counts["max_trade_id"] - bronze_counts["min_trade_id"] + 1
     missing = id_range - distinct
-    logger.info(f"Distinct trade ids: {distinct}, repeated: {repeated} (snapshot replays).")
-    logger.info(f"Missing trade ids: {missing} of {id_range} in range (event gaps).")
+    logger.info(f"Distinct trade ids: {distinct}, duplicates: {duplicates}.")
+    logger.info(f"Missing trade ids: {missing} of {id_range} in range (gaps).")
 
 
 def main():

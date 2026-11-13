@@ -34,9 +34,9 @@ def count_dropped(bronze_counts: dict, silver_counts: dict, reject_counts: dict)
 
 
 def compare_counts(bronze_counts: dict, silver_counts: dict, dropped: int) -> list:
-    repeated_ids = bronze_counts["trade_id_count"] - bronze_counts["distinct_trade_count"]
+    bronze_duplicates = bronze_counts["trade_id_count"] - bronze_counts["distinct_trade_count"]
     checks = [
-        ("dropped vs repeated ids in bronze", dropped, repeated_ids),
+        ("dropped vs duplicates in bronze", dropped, bronze_duplicates),
         (
             "silver trades vs distinct silver ids",
             silver_counts["trade_count"],

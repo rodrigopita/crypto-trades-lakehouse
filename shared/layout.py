@@ -13,7 +13,7 @@ class DataLayout(BaseSettings):
     def table_path(self, layer: str, table: str) -> str:
         return f"{self.data_folder}/{layer}/{table}"
 
-    def checkpoint_path(self, layer: str, table: str) -> str:
+    def query_checkpoint_path(self, layer: str, table: str) -> str:
         return f"{self.data_folder}/checkpoints/{layer}/{table}"
 
     def record_path(self) -> str:
