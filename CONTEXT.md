@@ -29,7 +29,7 @@ The timestamp of the actual event, when the trade happened. ("timestamp" in the 
 _Avoid_: trade time
 
 **Received time**:
-When the ingester received the message carrying a trade, by the ingester's clock. It is written into the landing file next to the trade.
+When the ingester received the message carrying a trade, by the ingester's wall clock. It is written into the landing file next to the trade. The wall clock can step back by about a second, so received time is not for measuring durations.
 _Avoid_: arrival time, ingest time
 
 **Processing time**:
@@ -47,29 +47,29 @@ _Avoid_: delayed (received time minus event time is the ingest delay, a differen
 
 **Too late**:
 A late trade that arrives after its candle is final. Spark does not guarantee whether it is counted: the docs say it "may or may not get aggregated".
-_Avoid_: dropped (not guaranteed)
+_Avoid_: dropped (not guaranteed, and dropped is what Silver does to duplicates)
 
 **Duplicate**:
-The same `trade_id` arriving twice.
+The same `trade_id` arriving twice. They come from the snapshot Kraken sends after a reconnect, which repeats trades the ingester already has. Silver keeps the first copy within the watermark threshold and drops the rest.
 
 **Gap**:
 A missing `trade_id` in the sequence of ids. Easily spotted if a distance between subsequent ids is greater than 1.
 
 **Watermark**:
-A point in event time that trails the newest event time a query has seen by a fixed threshold. A candle whose minute ends before the watermark stops accepting trades. It moves only when newer trades arrive, not with the clock.
-It tells which late trades are certain to be counted, not which ones are certain to be dropped.
+A point in event time that trails the newest event time a query has seen by a fixed threshold, the watermark threshold. A candle whose minute ends before the watermark stops accepting trades. In Silver, it bounds how long dedup remembers a `trade_id`. It moves only when newer trades arrive, not with the clock.
+It tells which late trades are certain to be counted, not which ones are certain to be left out.
 _Avoid_: cutoff, deadline
 
 ## The pipeline
 
 **Landing file**:
-The file that has been written to `data/landing/` by the ingester (with heartbeats dropped and a field to record the received time) where it waits to be processed.
+The file that has been written to `data/landing/` by the ingester (without heartbeats, and with a field to record the received time) where it waits to be processed.
 
 **Archived file**:
 A landing file that has already been read by the Bronze query and moved to the `archive/` directory.
 
 **Batch**:
-The trades the ingester writes into one landing file.
+The trade messages the ingester writes into one landing file. It closes after 60 s or 1,000 messages, and on a reconnect or a stop.
 _Avoid_: chunk; micro-batch (Spark's term, see below)
 
 **Micro-batch**:
@@ -89,7 +89,7 @@ A file Delta writes inside a table's `_delta_log/` that summarizes the log up to
 _Avoid_: checkpoint
 
 **Reject**:
-A trade that didn't make it into Silver.
+A trade that didn't make it into Silver. One that breaks a rule goes to `trade_rejects` with its reject reason: missing (no value), malformed (a value that doesn't cast) or not positive. A duplicate is dropped and only counted.
 
 ## Candles
 
@@ -114,5 +114,5 @@ _Avoid_: oracle, source of truth
 How far a Gold candle can be from its reference candle, for each field, and still count as matching.
 
 **Reconciliation**:
-Checking a layer against an independent record of the same data: at cp1, Bronze counts against the ingester's written-record log; at cp3, Gold candles against the reference candles.
+Checking a layer against an independent record of the same data: at cp1, Bronze counts against the ingester's written-record log; at cp2, Silver against Bronze, where the trades dropped equal Bronze's duplicates and Silver holds each `trade_id` once; at cp3, Gold candles against the reference candles.
 _Avoid_: validation
