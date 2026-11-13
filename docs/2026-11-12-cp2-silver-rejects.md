@@ -5,7 +5,7 @@ Written 2026-11-12 from one session of the ingester, the Bronze query and the tw
 ## What the numbers say
 
 - **The three injected trades reached the reject metrics, and none reached Silver.** The negative price and the missing `trade_id` are the only two rows in `silver/trade_rejects`, each with its reason. The duplicate is in Bronze twice and in Silver once, and it is one of the 53 duplicates the Silver reconciliation counts as dropped.
-- **Every Bronze trade is accounted for.** Bronze holds 8,621 trades: 8,566 in Silver, 2 rejected and 53 dropped. The 53 equal the repeated ids Bronze shows on its own, and Silver holds each of its 8,566 trade ids once.
+- **Every Bronze trade is accounted for.** Bronze holds 8,621 trades: 8,566 in Silver, 2 rejected and 53 dropped. The 53 equal the duplicates Bronze shows on its own, and Silver holds each of its 8,566 trade ids once.
 - **Bronze still reconciles with the ingester.** 4,095 messages and 8,621 trades on both sides, the same lowest and highest `trade_id`, and no gap in the ids.
 
 ## How it was run
@@ -92,15 +92,17 @@ INFO [2026-11-12 15:09:33] __main__ - Rejected, price not positive: 1.
 INFO [2026-11-12 15:09:33] __main__ - Duplicates dropped: 53.
 ```
 
-| measure                                                   | count |
-| --------------------------------------------------------- | ----: |
-| Bronze trades                                             | 8,621 |
-| Silver trades                                             | 8,566 |
-| rejected                                                  |     2 |
-| dropped: 8,621 − 8,566 − 2                                |    53 |
-| repeated ids in Bronze: 8,620 with an id − 8,567 distinct |    53 |
+| measure                                                 | count |
+| ------------------------------------------------------- | ----: |
+| Bronze trades                                           | 8,621 |
+| Silver trades                                           | 8,566 |
+| rejected                                                |     2 |
+| dropped: 8,621 − 8,566 − 2                              |    53 |
+| duplicates in Bronze: 8,620 with an id − 8,567 distinct |    53 |
 
 In the Bronze report, the first four lines are the reconciliation with the written-record log. In the Silver report, the first two are the reconciliation with Bronze and the last three are the reject metrics. A mismatch in either raises `ReconciliationError`.
+
+These are the session's logs, from `d076351`. Since `3e92eb4` the same lines follow the glossary: `duplicates: 53`, `(gaps)` and `dropped vs duplicates in bronze`, and a rerun on the same `data/` gave the same numbers.
 
 ## Findings
 
@@ -116,5 +118,5 @@ In the Bronze report, the first four lines are the reconciliation with the writt
 - **The processor's heap, before Gold.** Gold adds writers to the same 1 GiB heap in cp3. Watch `docker stats` and the `MemoryManager` warnings; a larger `spark.driver.memory` or smaller Parquet row groups are the two levers.
 - **A SIGTERM handler in the processor, in cp4.** It ends the exit 137.
 - **Reconnects as metrics, in cp4.** This session had two, one of them unscripted, and they show only as log lines.
-- **A bad copy of a real trade.** If a rejected trade ever shares its id with a good one, Bronze counts the id as repeated but nothing is dropped, and the Silver reconciliation reports a mismatch. Kraken has not sent one.
+- **A bad copy of a real trade.** If a rejected trade ever shares its id with a good one, Bronze counts the id as a duplicate but nothing is dropped, and the Silver reconciliation reports a mismatch. Kraken has not sent one.
 - **Tests.** `tests/` still holds no file.
