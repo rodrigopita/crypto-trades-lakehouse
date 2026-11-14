@@ -2,7 +2,6 @@ import logging
 import os
 
 from pyspark.sql import SparkSession
-from pyspark.sql.streaming import StreamingQuery
 
 from .settings import ProcessingSettings
 
@@ -23,7 +22,7 @@ TRADE_SCHEMA = (
 LANDING_SCHEMA = f"channel STRING, type STRING, data ARRAY<{TRADE_SCHEMA}>, received_time STRING"
 
 
-def start_bronze_query(spark: SparkSession, settings: ProcessingSettings) -> StreamingQuery:
+def start_bronze_query(spark: SparkSession, settings: ProcessingSettings):
     landing_folder = settings.landing_folder()
     table_path = settings.table_path(LAYER, TABLE)
     query_checkpoint_path = settings.query_checkpoint_path(LAYER, TABLE)
@@ -32,10 +31,6 @@ def start_bronze_query(spark: SparkSession, settings: ProcessingSettings) -> Str
     spark.createDataFrame([], LANDING_SCHEMA).write.format("delta").mode("ignore").save(table_path)
 
     landing_stream = spark.readStream.format("json").schema(LANDING_SCHEMA).load(landing_folder)
-    query = (
-        landing_stream.writeStream.outputMode("append")
-        .format("delta")
-        .option("checkpointLocation", query_checkpoint_path)
-        .start(table_path)
-    )
-    return query
+    landing_stream.writeStream.outputMode("append").format("delta").option(
+        "checkpointLocation", query_checkpoint_path
+    ).start(table_path)

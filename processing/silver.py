@@ -1,22 +1,18 @@
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.streaming import StreamingQuery
 
 from . import bronze
 from .settings import ProcessingSettings
 
 LAYER = "silver"
-TABLE = "trades"
-
+TRADES_TABLE = "trades"
 REJECTS_TABLE = "trade_rejects"
 
 
-def start_silver_queries(
-    spark: SparkSession, settings: ProcessingSettings
-) -> tuple[StreamingQuery, StreamingQuery]:
-    trades_table_path = settings.table_path(LAYER, TABLE)
+def start_silver_queries(spark: SparkSession, settings: ProcessingSettings):
+    trades_table_path = settings.table_path(LAYER, TRADES_TABLE)
     rejects_table_path = settings.table_path(LAYER, REJECTS_TABLE)
-    trades_query_checkpoint_path = settings.query_checkpoint_path(LAYER, TABLE)
+    trades_query_checkpoint_path = settings.query_checkpoint_path(LAYER, TRADES_TABLE)
     rejects_query_checkpoint_path = settings.query_checkpoint_path(LAYER, REJECTS_TABLE)
 
     bronze_stream = spark.readStream.format("delta").load(
@@ -25,7 +21,7 @@ def start_silver_queries(
 
     trades = bronze_stream.select(F.explode("data").alias("trade"), "received_time").select(
         "trade",
-        "received_time",
+        F.col("received_time").try_cast("timestamp").alias("received_time"),
         F.col("trade.symbol"),
         F.col("trade.side"),
         F.col("trade.price").try_cast("double").alias("price"),
@@ -38,11 +34,20 @@ def start_silver_queries(
     reject_reason = (
         F.when(F.col("trade.trade_id").isNull(), "missing trade_id")
         .when(F.col("trade_id").isNull(), "malformed trade_id")
-        .when(F.col("price") <= 0, "price not positive")
+        .when(F.col("trade.price").isNull(), "missing price")
         .when(F.col("price").isNull(), "malformed price")
-        .when(F.col("qty") <= 0, "qty not positive")
+        .when(F.col("price").isNaN() | (F.col("price") == float("inf")), "malformed price")
+        .when(F.col("price") <= 0, "price not positive")
+        .when(F.col("trade.qty").isNull(), "missing qty")
         .when(F.col("qty").isNull(), "malformed qty")
+        .when(F.col("qty").isNaN() | (F.col("qty") == float("inf")), "malformed qty")
+        .when(F.col("qty") <= 0, "qty not positive")
+        .when(F.col("trade.timestamp").isNull(), "missing timestamp")
         .when(F.col("event_time").isNull(), "malformed timestamp")
+        .when(
+            F.col("event_time") > F.col("received_time") + F.expr("INTERVAL 1 MINUTE"),
+            "timestamp in the future",
+        )
     )
     checked = trades.withColumn("reject_reason", reject_reason)
     deduplicated = (
@@ -51,33 +56,23 @@ def start_silver_queries(
         .dropDuplicatesWithinWatermark(["trade_id"])
     )
 
-    trades_query = (
-        deduplicated.select(
-            "symbol",
-            "side",
-            "price",
-            "qty",
-            "ord_type",
-            "trade_id",
-            "event_time",
-            "received_time",
-        )
-        .writeStream.outputMode("append")
-        .format("delta")
-        .option("checkpointLocation", trades_query_checkpoint_path)
-        .start(trades_table_path)
-    )
+    deduplicated.select(
+        "symbol",
+        "side",
+        "price",
+        "qty",
+        "ord_type",
+        "trade_id",
+        "event_time",
+        "received_time",
+    ).writeStream.outputMode("append").format("delta").option(
+        "checkpointLocation", trades_query_checkpoint_path
+    ).start(trades_table_path)
 
-    rejects_query = (
-        checked.filter(F.col("reject_reason").isNotNull())
-        .select(
-            "trade",
-            "received_time",
-            "reject_reason",
-        )
-        .writeStream.outputMode("append")
-        .format("delta")
-        .option("checkpointLocation", rejects_query_checkpoint_path)
-        .start(rejects_table_path)
-    )
-    return trades_query, rejects_query
+    checked.filter(F.col("reject_reason").isNotNull()).select(
+        "trade",
+        "received_time",
+        "reject_reason",
+    ).writeStream.outputMode("append").format("delta").option(
+        "checkpointLocation", rejects_query_checkpoint_path
+    ).start(rejects_table_path)

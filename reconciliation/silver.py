@@ -4,7 +4,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 from processing.settings import ProcessingSettings
-from processing.silver import LAYER, REJECTS_TABLE, TABLE
+from processing.silver import LAYER, REJECTS_TABLE, TRADES_TABLE
 from reconciliation.bronze import get_bronze_counts
 from reconciliation.checks import ReconciliationError
 from shared.logs import configure_logging
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_silver_counts(spark: SparkSession, settings: ProcessingSettings) -> dict:
-    trades = spark.read.format("delta").load(settings.table_path(LAYER, TABLE))
+    trades = spark.read.format("delta").load(settings.table_path(LAYER, TRADES_TABLE))
 
     trade_counts = trades.agg(
         F.count("*").alias("trade_count"),
