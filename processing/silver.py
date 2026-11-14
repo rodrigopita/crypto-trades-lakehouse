@@ -52,11 +52,11 @@ def start_silver_queries(spark: SparkSession, settings: ProcessingSettings):
     checked = trades.withColumn("reject_reason", reject_reason)
     deduplicated = (
         checked.filter(F.col("reject_reason").isNull())
-        .withWatermark("event_time", settings.watermark_threshold)
+        .withWatermark("event_time", settings.silver_watermark_threshold)
         .dropDuplicatesWithinWatermark(["trade_id"])
     )
 
-    deduplicated.select(
+    trades_select = deduplicated.select(
         "symbol",
         "side",
         "price",
@@ -65,14 +65,25 @@ def start_silver_queries(spark: SparkSession, settings: ProcessingSettings):
         "trade_id",
         "event_time",
         "received_time",
-    ).writeStream.outputMode("append").format("delta").option(
-        "checkpointLocation", trades_query_checkpoint_path
-    ).start(trades_table_path)
+    )
 
-    checked.filter(F.col("reject_reason").isNotNull()).select(
+    rejects_select = checked.filter(F.col("reject_reason").isNotNull()).select(
         "trade",
         "received_time",
         "reject_reason",
-    ).writeStream.outputMode("append").format("delta").option(
+    )
+
+    spark.createDataFrame([], trades_select.schema).write.format("delta").mode("ignore").save(
+        trades_table_path
+    )
+    spark.createDataFrame([], rejects_select.schema).write.format("delta").mode("ignore").save(
+        rejects_table_path
+    )
+
+    trades_select.writeStream.outputMode("append").format("delta").option(
+        "checkpointLocation", trades_query_checkpoint_path
+    ).start(trades_table_path)
+
+    rejects_select.writeStream.outputMode("append").format("delta").option(
         "checkpointLocation", rejects_query_checkpoint_path
     ).start(rejects_table_path)

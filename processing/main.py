@@ -5,6 +5,7 @@ from pyspark.sql import SparkSession
 from shared.logs import configure_logging
 
 from .bronze import start_bronze_query
+from .gold import start_gold_query
 from .settings import ProcessingSettings
 from .silver import start_silver_queries
 
@@ -20,6 +21,7 @@ def main():
 
     start_bronze_query(spark, settings)
     start_silver_queries(spark, settings)
+    start_gold_query(spark, settings)
 
     spark.streams.awaitAnyTermination()
 
