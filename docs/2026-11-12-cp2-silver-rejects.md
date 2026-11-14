@@ -104,6 +104,18 @@ In the Bronze report, the first four lines are the reconciliation with the writt
 
 These are the session's logs, from `d076351`. Since `3e92eb4` the same lines follow the glossary: `duplicates: 53`, `(gaps)` and `dropped vs duplicates in bronze`, and a rerun on the same `data/` gave the same numbers.
 
+## Rules added after the session
+
+The two-axis review from `cp1-ingest` found two gaps in the rules the session ran with, and `96cf00b` closed them:
+
+- **A future event time emptied Silver.** A trade dated 2099 passed every rule, moved the watermark, and the dedup step then dropped every real trade after it as too late, without a trace in either table. Silver now rejects a trade whose event time is more than a minute after its received time. In this session, event time was at most 1.5 s ahead of received time.
+- **`NaN` and `Infinity` passed `price <= 0`.** Both cast to a double, and Spark orders `NaN` above every number. Both are now malformed, for price and for quantity.
+
+The same commit gives price, quantity and timestamp a "missing" reason, as `trade_id` already had, and types Silver's `received_time`. Two checks of `96cf00b`:
+
+- **Silver re-derived from this session's Bronze.** Both reconciliations then gave the numbers above: Silver 8,566, rejects 2, and 53 dropped equal to Bronze's 53 duplicates.
+- **Two hand-made landing files, one micro-batch each.** The trade dated 2099 was rejected as `timestamp in the future`, and an ordinary trade in the next micro-batch was kept in Silver. `NaN`, `Infinity`, missing and malformed values were each rejected with their reason.
+
 ## Findings
 
 - **The 53 duplicates came from three places.** The snapshot after the scripted reset replayed 2 trades the ingester already had, the one after the unscripted disconnect replayed 50, and the injector added 1. The natural ones were at most 15 s behind the newest event time and the injected one 28 s, well inside the 5-minute watermark threshold, so dedup kept one copy of each.
@@ -118,5 +130,7 @@ These are the session's logs, from `d076351`. Since `3e92eb4` the same lines fol
 - **The processor's heap, before Gold.** Gold adds writers to the same 1 GiB heap in cp3. Watch `docker stats` and the `MemoryManager` warnings; a larger `spark.driver.memory` or smaller Parquet row groups are the two levers.
 - **A SIGTERM handler in the processor, in cp4.** It ends the exit 137.
 - **Reconnects as metrics, in cp4.** This session had two, one of them unscripted, and they show only as log lines.
+- **Dropped trades measured, not derived, in cp4.** "Duplicates dropped" is what is left of Bronze after Silver and the rejects. The dedup step reports `numDroppedDuplicateRows` and `numRowsDroppedByWatermark` in each query's progress, which would separate duplicates from too-late trades and give the duplicate and late-event rates the observability list asks for.
+- **The reconciliation's timing.** It assumes both Silver queries have read the same Bronze version, which holds only once the processor has stopped, as in this session. Nothing checks it.
 - **A bad copy of a real trade.** If a rejected trade ever shares its id with a good one, Bronze counts the id as a duplicate but nothing is dropped, and the Silver reconciliation reports a mismatch. Kraken has not sent one.
 - **Tests.** `tests/` still holds no file.
