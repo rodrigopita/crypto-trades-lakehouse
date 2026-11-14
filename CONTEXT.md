@@ -89,7 +89,7 @@ A file Delta writes inside a table's `_delta_log/` that summarizes the log up to
 _Avoid_: checkpoint
 
 **Reject**:
-A trade that didn't make it into Silver. One that breaks a rule goes to `trade_rejects` with its reject reason: missing (no value), not positive, or a timestamp in the future. A duplicate is dropped and only counted.
+A trade that didn't make it into Silver. One that breaks a rule goes to `trade_rejects` with its reject reason: missing (no value), malformed (a value that doesn't cast), not positive, or a timestamp in the future. A duplicate is dropped and only counted.
 
 ## Candles
 
