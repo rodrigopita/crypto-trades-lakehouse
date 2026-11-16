@@ -17,7 +17,11 @@ def main():
     settings = ProcessingSettings()
 
     logger.info("Starting Spark session...")
-    spark = SparkSession.builder.appName("CryptoTradesLakehouse").getOrCreate()
+    spark = (
+        SparkSession.builder.appName("CryptoTradesLakehouse")
+        .config("spark.sql.shuffle.partitions", settings.shuffle_partitions)
+        .getOrCreate()
+    )
 
     start_bronze_query(spark, settings)
     start_silver_queries(spark, settings)
