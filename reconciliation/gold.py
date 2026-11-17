@@ -188,9 +188,10 @@ def main():
     failed = compare_checked_minutes(buckets["checked"], gold_candles, kraken_ohlc)
     log_buckets(buckets, silver_counts, gold_candles, kraken_ohlc, failed)
 
-    if buckets["impossible"] or failed:
+    if buckets["impossible"] or not buckets["checked"] or failed:
         raise ReconciliationError(
-            f"Impossible minutes: {buckets['impossible']}, mismatches: {failed}."
+            f"Impossible minutes: {buckets['impossible']}, "
+            f"checked minutes: {len(buckets["checked"])}, mismatches: {failed}."
         )
 
 
