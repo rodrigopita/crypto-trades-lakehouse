@@ -22,6 +22,7 @@ processing = [
     "delta-spark==4.4.1",
     "pydantic-settings==2.16.2",
     "pyspark==4.2.0",
+    "requests==2.34.2"
 ]
 
 [tool.uv]

@@ -26,6 +26,7 @@ def start_gold_query(spark: SparkSession, settings: ProcessingSettings):
             F.max_by("price", F.struct("event_time", "trade_id")).alias("close"),
             (F.sum(F.col("price") * F.col("qty")) / F.sum("qty")).alias("vwap"),
             F.sum("qty").alias("volume"),
+            F.count("trade_id").alias("trade_count"),
         )
     )
 

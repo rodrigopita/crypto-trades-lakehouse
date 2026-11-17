@@ -80,7 +80,7 @@ def ingest_with_reconnects(settings: IngesterSettings, trades_batch: TradesBatch
                         "method": "subscribe",
                         "params": {
                             "channel": "trade",
-                            "symbol": ["BTC/USD"],
+                            "symbol": [settings.asset_pair],
                             "snapshot": True,
                         },
                     }

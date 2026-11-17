@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 class DataLayout(BaseSettings):
     data_folder: str = "data"
+    asset_pair: str = "BTC/USD"
 
     def landing_folder(self) -> str:
         return f"{self.data_folder}/landing"
