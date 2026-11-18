@@ -69,22 +69,31 @@ def get_kraken_ohlc(settings: ProcessingSettings) -> dict:
     return kraken_candles
 
 
+def minute_counts(
+    minute: int, silver_counts: dict, gold_candles: dict, kraken_ohlc: dict
+) -> tuple[int, int, int]:
+    kraken_count = kraken_ohlc[minute][-1]
+    silver_count = silver_counts.get(minute, 0)
+    gold_count = gold_candles[minute]["trade_count"] if minute in gold_candles else 0
+    return kraken_count, silver_count, gold_count
+
+
 def classify_minutes(silver_counts: dict, gold_candles: dict, kraken_ohlc: dict) -> dict:
     buckets = {name: [] for name in BUCKETS}
-    min_silver_counts = min(silver_counts)
+    first_minute = min(silver_counts)
 
-    for minute in sorted(gold_candles.keys()):
+    for minute in range(first_minute, max(gold_candles) + 60, 60):
         if minute not in kraken_ohlc:
             buckets["unchecked"].append(minute)
             continue
 
-        silver_count = silver_counts[minute]
-        gold_count = gold_candles[minute]["trade_count"]
-        kraken_count = kraken_ohlc[minute][-1]
+        kraken_count, silver_count, gold_count = minute_counts(
+            minute, silver_counts, gold_candles, kraken_ohlc
+        )
 
         if kraken_count < silver_count or gold_count > silver_count:
             buckets["impossible"].append(minute)
-        elif minute == min_silver_counts:
+        elif minute == first_minute:
             buckets["partial"].append(minute)
         elif kraken_count > silver_count:
             buckets["gap"].append(minute)
@@ -99,6 +108,9 @@ def classify_minutes(silver_counts: dict, gold_candles: dict, kraken_ohlc: dict)
 def compare_checked_minutes(minutes: list, gold_candles: dict, kraken_ohlc: dict) -> list:
     failed = []
     for minute in minutes:
+        if minute not in gold_candles:  # no trades in Kraken, Silver or Gold
+            continue
+
         gold_candle = gold_candles[minute]
         kraken_candle = kraken_ohlc[minute]
 
@@ -135,7 +147,9 @@ def log_buckets(
 
     missing = 0
     for minute in buckets["gap"]:
-        kraken_count, silver_count = kraken_ohlc[minute][-1], silver_counts[minute]
+        kraken_count, silver_count, _ = minute_counts(
+            minute, silver_counts, gold_candles, kraken_ohlc
+        )
         missing += kraken_count - silver_count
         logger.info(
             f"Gap {format_minute(minute)}: reference {kraken_count} trades, "
@@ -145,7 +159,9 @@ def log_buckets(
 
     too_late = 0
     for minute in buckets["too_late"]:
-        silver_count, gold_count = silver_counts[minute], gold_candles[minute]["trade_count"]
+        _, silver_count, gold_count = minute_counts(
+            minute, silver_counts, gold_candles, kraken_ohlc
+        )
         too_late += silver_count - gold_count
         logger.info(
             f"Too late {format_minute(minute)}: silver {silver_count} trades, "
@@ -154,9 +170,12 @@ def log_buckets(
     logger.info(f"Too late minutes: {len(buckets['too_late'])}, trades too late: {too_late}.")
 
     for minute in buckets["impossible"]:
+        kraken_count, silver_count, gold_count = minute_counts(
+            minute, silver_counts, gold_candles, kraken_ohlc
+        )
         logger.info(
-            f"Impossible {format_minute(minute)}: reference {kraken_ohlc[minute][-1]} trades, "
-            f"silver {silver_counts[minute]}, gold {gold_candles[minute]['trade_count']}."
+            f"Impossible {format_minute(minute)}: reference {kraken_count} trades, "
+            f"silver {silver_count}, gold {gold_count}."
         )
     logger.info(f"Impossible minutes: {len(buckets['impossible'])}.")
 
@@ -179,8 +198,9 @@ def main():
     silver_counts = get_silver_counts_per_minute(spark, settings)
     gold_candles = get_gold_candles_per_minute(spark, settings)
     if not gold_candles:
-        logger.info("Gold has no final candles; nothing to compare with the reference candles.")
-        return
+        raise ReconciliationError(
+            "Gold has no final candles; nothing to compare with the reference candles."
+        )
 
     kraken_ohlc = get_kraken_ohlc(settings)
 
@@ -191,7 +211,7 @@ def main():
     if buckets["impossible"] or not buckets["checked"] or failed:
         raise ReconciliationError(
             f"Impossible minutes: {buckets['impossible']}, "
-            f"checked minutes: {len(buckets["checked"])}, mismatches: {failed}."
+            f"checked minutes: {len(buckets['checked'])}, mismatches: {failed}."
         )
 
 
