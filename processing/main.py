@@ -1,4 +1,6 @@
 import logging
+import signal
+import threading
 
 from pyspark.sql import SparkSession
 
@@ -11,8 +13,15 @@ from .silver import start_silver_queries
 
 logger = logging.getLogger(__name__)
 
+stop_requested = threading.Event()
+
+
+def _stop(signum, frame):
+    stop_requested.set()
+
 
 def main():
+    signal.signal(signal.SIGTERM, _stop)
     configure_logging()
     settings = ProcessingSettings()
 
@@ -27,7 +36,22 @@ def main():
     start_silver_queries(spark, settings)
     start_gold_query(spark, settings)
 
-    spark.streams.awaitAnyTermination()
+    while True:
+        result = spark.streams.awaitAnyTermination(timeout=settings.await_termination_timeout)
+        if stop_requested.is_set():
+            logger.info("SIGTERM received. stopping...")
+            break
+        if result:
+            logger.info(
+                "A query stopped without an error. "
+                f"Active queries: {[query.name for query in spark.streams.active]}"
+            )
+            break
+
+    logger.info("Stopping all active queries...")
+    for query in spark.streams.active:
+        query.stop()
+    spark.stop()
 
 
 if __name__ == "__main__":

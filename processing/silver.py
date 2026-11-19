@@ -82,8 +82,8 @@ def start_silver_queries(spark: SparkSession, settings: ProcessingSettings):
 
     trades_select.writeStream.outputMode("append").format("delta").option(
         "checkpointLocation", trades_query_checkpoint_path
-    ).start(trades_table_path)
+    ).queryName("silver_trades").start(trades_table_path)
 
     rejects_select.writeStream.outputMode("append").format("delta").option(
         "checkpointLocation", rejects_query_checkpoint_path
-    ).start(rejects_table_path)
+    ).queryName("silver_rejects").start(rejects_table_path)

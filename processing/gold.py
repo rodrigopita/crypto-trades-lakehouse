@@ -32,4 +32,4 @@ def start_gold_query(spark: SparkSession, settings: ProcessingSettings):
 
     candles.writeStream.outputMode("append").format("delta").option(
         "checkpointLocation", candles_query_checkpoint_path
-    ).start(candles_table_path)
+    ).queryName("gold_candles").start(candles_table_path)

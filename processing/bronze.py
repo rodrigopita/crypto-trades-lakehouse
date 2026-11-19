@@ -33,4 +33,4 @@ def start_bronze_query(spark: SparkSession, settings: ProcessingSettings):
     landing_stream = spark.readStream.format("json").schema(LANDING_SCHEMA).load(landing_folder)
     landing_stream.writeStream.outputMode("append").format("delta").option(
         "checkpointLocation", query_checkpoint_path
-    ).start(table_path)
+    ).queryName("bronze_trade_messages").start(table_path)
