@@ -8,6 +8,9 @@ class DataLayout(BaseSettings):
     def landing_folder(self) -> str:
         return f"{self.data_folder}/landing"
 
+    def archive_folder(self) -> str:
+        return f"{self.data_folder}/archive"
+
     def tmp_folder(self) -> str:
         return f"{self.data_folder}/tmp"
 
