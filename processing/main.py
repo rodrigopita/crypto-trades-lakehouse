@@ -8,6 +8,7 @@ from shared.logs import configure_logging
 
 from .bronze import start_bronze_query
 from .gold import start_gold_query
+from .metrics import Listener
 from .settings import ProcessingSettings
 from .silver import start_silver_queries
 
@@ -24,6 +25,7 @@ def main():
     signal.signal(signal.SIGTERM, _stop)
     configure_logging()
     settings = ProcessingSettings()
+    listener = Listener(settings.metrics_path())
 
     logger.info("Starting Spark session...")
     spark = (
@@ -31,6 +33,7 @@ def main():
         .config("spark.sql.shuffle.partitions", settings.shuffle_partitions)
         .getOrCreate()
     )
+    spark.streams.addListener(listener)
 
     start_bronze_query(spark, settings)
     start_silver_queries(spark, settings)
