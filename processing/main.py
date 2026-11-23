@@ -25,7 +25,7 @@ def main():
     signal.signal(signal.SIGTERM, _stop)
     configure_logging()
     settings = ProcessingSettings()
-    listener = Listener(settings.metrics_path())
+    listener = Listener(settings.progress_metrics_path())
 
     logger.info("Starting Spark session...")
     spark = (

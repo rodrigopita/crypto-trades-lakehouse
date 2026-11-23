@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import signal
 import time
 from collections.abc import Callable
@@ -69,12 +70,25 @@ def receive_trades(
         trades_batch.add(trade_message)
 
 
+def register_connection_metrics(event: str, metrics_path: str, reason: str | None = None):
+    connection_metrics = {
+        "time": iso_utc(utc_now()),
+        "event": event,
+        "reason": reason,
+    }
+    with open(metrics_path, "a") as f:
+        f.write(json.dumps(connection_metrics) + "\n")
+
+
 def ingest_with_reconnects(settings: IngesterSettings, trades_batch: TradesBatch):
     backoff = Backoff()
     while True:
+        connected = False
         try:
             with connect(uri=settings.uri, close_timeout=settings.close_timeout) as websocket:
                 logger.info(f"Connected to {settings.uri}.")
+                register_connection_metrics("connected", settings.connections_metrics_path())
+                connected = True
                 payload = json.dumps(
                     {
                         "method": "subscribe",
@@ -89,6 +103,11 @@ def ingest_with_reconnects(settings: IngesterSettings, trades_batch: TradesBatch
                 receive_trades(websocket, trades_batch, settings.stall_timeout, backoff)
         except (TimeoutError, ConnectionClosed, InvalidHandshake, OSError) as exc:
             logger.warning("%s: %s. Reconnecting...", type(exc).__name__, exc)
+            register_connection_metrics(
+                "disconnected" if connected else "connect_failed",
+                settings.connections_metrics_path(),
+                f"{type(exc).__name__}: {exc}",
+            )
             trades_batch.flush()
             backoff.wait()
 
@@ -103,6 +122,7 @@ def main():
         settings.tmp_folder(),
         settings.record_path(),
     )
+    os.makedirs(os.path.dirname(settings.connections_metrics_path()), exist_ok=True)
 
     try:
         ingest_with_reconnects(settings, trades_batch)

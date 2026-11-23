@@ -23,5 +23,8 @@ class DataLayout(BaseSettings):
     def record_path(self) -> str:
         return f"{self.data_folder}/record/written.jsonl"
 
-    def metrics_path(self) -> str:
+    def progress_metrics_path(self) -> str:
         return f"{self.data_folder}/metrics/progress.jsonl"
+
+    def connections_metrics_path(self) -> str:
+        return f"{self.data_folder}/metrics/connections.jsonl"
