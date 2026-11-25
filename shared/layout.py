@@ -28,3 +28,6 @@ class DataLayout(BaseSettings):
 
     def connections_metrics_path(self) -> str:
         return f"{self.data_folder}/metrics/connections.jsonl"
+
+    def summary_metrics_path(self) -> str:
+        return f"{self.data_folder}/metrics/summary.json"
