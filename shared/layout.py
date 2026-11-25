@@ -31,3 +31,6 @@ class DataLayout(BaseSettings):
 
     def summary_metrics_path(self) -> str:
         return f"{self.data_folder}/metrics/summary.json"
+
+    def optimize_metrics_path(self) -> str:
+        return f"{self.data_folder}/metrics/optimize.jsonl"
