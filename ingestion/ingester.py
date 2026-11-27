@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import signal
 import time
 from collections.abc import Callable
@@ -8,6 +7,7 @@ from collections.abc import Callable
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 from websockets.sync.client import ClientConnection, connect
 
+from shared.jsonl import append_jsonl
 from shared.logs import configure_logging
 
 from .landing import TradesBatch, iso_utc, utc_now
@@ -71,13 +71,17 @@ def receive_trades(
 
 
 def register_connection_metrics(event: str, metrics_path: str, reason: str | None = None):
+    """Records a connection event. A failed write only logs a warning: it runs inside the
+    reconnect loop's try, where an OSError would otherwise read as a connection failure."""
     connection_metrics = {
         "time": iso_utc(utc_now()),
         "event": event,
         "reason": reason,
     }
-    with open(metrics_path, "a") as f:
-        f.write(json.dumps(connection_metrics) + "\n")
+    try:
+        append_jsonl(metrics_path, connection_metrics)
+    except OSError as exc:
+        logger.warning(f"Could not record the {event} event in {metrics_path}: {exc}")
 
 
 def ingest_with_reconnects(settings: IngesterSettings, trades_batch: TradesBatch):
@@ -122,7 +126,6 @@ def main():
         settings.tmp_folder(),
         settings.record_path(),
     )
-    os.makedirs(os.path.dirname(settings.connections_metrics_path()), exist_ok=True)
 
     try:
         ingest_with_reconnects(settings, trades_batch)
