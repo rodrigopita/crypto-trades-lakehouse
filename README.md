@@ -41,8 +41,8 @@ docker compose run --rm --no-deps processor python -m processing.optimize
 
 Candles use each trade's own timestamp, not the time it arrived.
 
-- **A candle is final once the watermark passes the end of its minute.** Gold groups trades into one-minute windows under a 1-minute watermark, which is the newest event time seen minus 1 minute. It writes each candle once, when final, and never changes it. In the cp4 session that came a median 74 s after the minute ended.
-- **A trade that arrives after its candle is final is dropped** and counted as late. No session has had one: 0 of 8,566 trades in cp2, 3,265 in cp3 and 6,139 in cp4.
+- **A candle is final once the watermark passes the end of its minute.** Gold groups trades into one-minute windows under a 1-minute watermark, which is the newest event time seen minus 1 minute. It writes each candle once, when final, and never changes it. In the cp4 session that came a median 90 s after the minute ended, 147 s at the 95th percentile.
+- **A trade that arrives after its candle is final is too late,** and that candle never counts it. No session has had one, in 8,566 trades in cp2, 3,265 in cp3 and 6,139 in cp4.
 - **Order inside a minute comes from the data.** Open and close are the first and last trades by event time, then trade id, whatever order they arrived in.
 - **A reconnect replays up to 50 trades** in Kraken's subscribe snapshot. Silver drops the ones it already has, by `trade_id`, under a 5-minute watermark.
 - **The cost is the end of a session.** Once the ingester stops, no newer trade moves the watermark, so the last one or two minutes never become final.
@@ -65,7 +65,7 @@ Alternatives considered:
 | `reconciliation.gold`    | Gold against Kraken's REST candles. OHLC exact, volume within 1e-9, VWAP within 0.1, since Kraken cuts VWAP to one decimal | 31 checked minutes, all within tolerance; 1 partial and 2 gap minutes |
 | `reconciliation.metrics` | the metrics below, from query progress, connection events and Delta's history                  | written to `data/metrics/summary.json`              |
 
-None of them writes to a table, so a second run prints the same lines.
+None of them writes to a table, so a second run prints the same lines. Gold's volume is compared with Kraken's in every checked minute; no other volume comparison, such as buy against sell volume, is built.
 
 ## Metrics
 
@@ -76,17 +76,18 @@ From the cp4 session, 35 minutes with a 60 s reset, a 20 s stall, a processor re
 | WebSocket reconnects     | 2, 76.9 s down                                          |
 | event gaps               | 90 missing trade ids                                    |
 | duplicate rate           | 7 of 6,146 trades, 0.11%                                |
-| late-event rate          | 0                                                       |
+| late-event rate          | 0 trades behind Silver's watermark; 0 Gold windows with too-late trades |
 | dropped by quality rules | 2                                                       |
 | watermark lag, Gold      | median 73.6 s, 95th percentile 133.8 s                  |
+| candle finality delay    | median 90.3 s, 95th percentile 147.3 s                  |
 | micro-batch latency      | median 1.5 to 2.7 s per query                           |
 | input and output         | 2,765 messages in Bronze, 6,139 trades in Silver, 34 candles in Gold |
 
-Watermark lag is a batch's start time minus its watermark. Latency is a batch's `triggerExecution`, over batches with input, leaving out each run's first batch, which includes startup.
+Watermark lag is a micro-batch's start time minus its watermark. Candle finality delay runs from a minute's end to the end of the micro-batch whose watermark passed it. Latency is a micro-batch's `triggerExecution`, over micro-batches with input, leaving out each run's first one, which includes startup. Gold's late-event count is per window, not per trade, because Spark counts too-late input after partial aggregation.
 
 ## Small files
 
-Bronze archives each landing file once its batch commits, with the file source's `cleanSource` option. cp3 left 40 files in landing. cp4 left 1 and archived 34.
+Bronze archives each landing file once the next micro-batch with new data commits, with the file source's `cleanSource` option, so landing keeps the newest file it read. cp3 left 40 files in landing. cp4 left 1 and archived 34.
 
 For the Delta tables, `processing.optimize` ran one `OPTIMIZE` pass after the cp4 session:
 
@@ -95,7 +96,7 @@ For the Delta tables, `processing.optimize` ran one `OPTIMIZE` pass after the cp
 | `silver/trades` |                68 → 1 |     104 → 105 | 321,143 → 140,646 |
 | `gold/candles`  |                32 → 1 |     108 → 109 |    96,545 → 4,933 |
 
-Readers open the snapshot's files. The count on disk rises because Delta keeps the replaced files until a `VACUUM`, which this project does not run. The pass does not compare query time, since at this size it is noise. The 1,698 checkpoint files are a separate problem, left as they are.
+Readers open the snapshot's files. The disk starts above the snapshot because it also holds empty Parquet files, 36 in Silver and 76 in Gold, written by tasks with no rows and never added to a commit. The count on disk rises because Delta keeps the replaced files until a `VACUUM`, which this project does not run. The pass does not compare query time, since at this size it is noise. The 1,698 checkpoint files are a separate problem, left as they are.
 
 ## Versions
 
@@ -103,4 +104,4 @@ Python 3.14.9, Java 21 (Temurin 21.0.12.1), PySpark 4.2.0, delta-spark 4.4.1 and
 
 ## Evidence
 
-`docs/scope.md` is the spec. Each checkpoint has a proof doc with its session's numbers: `docs/2026-11-09-cp1-reconciliation.md`, `docs/2026-11-12-cp2-silver-rejects.md`, `docs/2026-11-17-cp3-candles.md` and `docs/2026-11-27-cp4-operability.md`.
+`docs/scope.md` is the spec. Each milestone has a proof doc with its session's numbers: `docs/2026-11-09-cp1-reconciliation.md`, `docs/2026-11-12-cp2-silver-rejects.md`, `docs/2026-11-17-cp3-candles.md` and `docs/2026-11-27-cp4-operability.md`.

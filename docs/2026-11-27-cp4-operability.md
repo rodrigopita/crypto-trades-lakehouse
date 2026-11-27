@@ -34,7 +34,7 @@ The landing folder and the Delta tables are separate small-files problems, as `d
 
 ### Landing
 
-Bronze's file source archives each landing file once its batch has committed. Its `cleanSource` option is set to `archive`, and `sourceArchiveDir` points to `data/archive`. A file moves one batch late, when the next batch with new data commits, so landing keeps the newest file Bronze has read.
+Bronze's file source archives each landing file one micro-batch late, when the next micro-batch with new data commits. Its `cleanSource` option is set to `archive`, and `sourceArchiveDir` points to `data/archive`. So landing keeps the newest file Bronze has read.
 
 | session | minutes | landing files left | archived |
 | ------- | ------: | -----------------: | -------: |
@@ -67,7 +67,7 @@ INFO [2026-11-27 02:52:50] __main__ - gold/candles: 32 -> 1 files in the snapsho
 
 ## The metrics
 
-`reconciliation.metrics` reads the queries' progress reports from `data/metrics/progress.jsonl`, written by a `StreamingQueryListener` in the processor, one line per batch per query; the ingester's connection events from `data/metrics/connections.jsonl`; each table's Delta history; and Bronze's trade ids. It logs the spec's metrics and writes them to `data/metrics/summary.json`.
+`reconciliation.metrics` reads the queries' progress reports from `data/metrics/progress.jsonl`, written by a `StreamingQueryListener` in the processor, one line per micro-batch per query; the ingester's connection events from `data/metrics/connections.jsonl`; each table's Delta history; and Bronze's trade ids. It logs the spec's metrics and writes them to `data/metrics/summary.json`.
 
 ```
 INFO [2026-11-27 02:51:08] __main__ - Websocket reconnects: 2 (6 failed attempts, 76.9 s down, longest 63.6 s).
@@ -96,10 +96,10 @@ INFO [2026-11-27 02:51:08] __main__ - Output rows, gold/candles: 34.
 | reconnects            | `disconnected` events: a connection that was open and dropped. Attempts that never connected are `connect_failed`. Downtime runs from each `disconnected` to the next `connected` |
 | event gaps            | trade ids missing from Bronze's range: highest − lowest + 1 − distinct                                                                         |
 | duplicate rate        | duplicates Silver's dedup dropped, over the trades that reached it: kept + duplicates + dropped by the watermark                                |
-| late-event rate       | rows each stateful operator dropped behind its watermark: Silver's dedup over the trades reaching it, Gold's aggregation over Gold's input rows  |
+| late-event rate       | input behind each stateful operator's watermark. Silver's dedup counts trades, over the trades reaching it. Gold's aggregation counts windows, not trades, so this session's Gold rate mixed units; see "Fixed after the review" |
 | dropped by quality rules | rows written to `silver/trade_rejects`                                                                                                     |
-| watermark lag         | a batch's start time minus the watermark it ran with, for Silver and Gold. For Gold it is how long after a minute ends its candle becomes final |
-| micro-batch latency   | `triggerExecution` of batches with input rows, leaving out each run's first batch, whose time includes startup                                 |
+| watermark lag         | a micro-batch's start time minus the watermark it ran with, for Silver and Gold. For Gold it is a lower bound on how long a candle waits to be final; see "Fixed after the review" |
+| micro-batch latency   | `triggerExecution` of micro-batches with input rows, leaving out each run's first micro-batch, whose time includes startup                     |
 | input and output rows | input from each query's progress; output summed from the `numOutputRows` of each table's streaming commits                                     |
 
 Silver's queries count Bronze messages as their input rows, not trades, 2,765 each against 6,148 trades. That is why duplicates come from the dedup operator and rejects from the rejects table. Delta's streaming sink reports `-1` output rows in the progress, so output rows come from the table's history instead.
@@ -291,13 +291,30 @@ The tolerance is cp3's: open, high, low and close exact, volume within 1e-9, VWA
 | never final, 02:47 and 02:48                      |    144 |
 | total                                             |  6,139 |
 
-The late-data policy is cp3's, unchanged: a 1-minute watermark, each candle appended once when final. Again no trade reached Gold after its candle was final; the report counts 0 rows dropped behind the watermark in both stateful queries.
+The late-data policy is cp3's, unchanged: a 1-minute watermark, each candle appended once when final. Again no trade reached Gold after its candle was final. The Gold reconciliation counts 0 too-late trades, and the report 0 trades behind Silver's watermark.
+
+## Fixed after the review
+
+The two-axis review from `cp3-candles` found two misleading numbers in the report and a fragile write in the ingester. `2a862cf`, `acd830d` and `7ca47c6` fix them.
+
+- **Gold's late-event rate mixed units.** Gold's aggregation counts its too-late input after partial aggregation, once per window and partition, however many trades that window had. A probe sent 5 too-late trades into one window, and Spark reported `numRowsDroppedByWatermark` 1. The report now gives Gold's figure as windows; the Gold reconciliation's too-late bucket counts trades. cp3's note that this progress field "would count them directly" was wrong for the same reason.
+- **Watermark lag understated the finality delay.** Its 73.6 s median ran over all 88 of Gold's micro-batches, including ones with no data, and a micro-batch starts before the commit that makes a candle final. The report now measures each candle from its minute's end to the end of the micro-batch whose watermark passed it. That gives a median of 90.3 s, within 0.1 s of the delay measured from Gold's commit times.
+- **A failed connection-event write could stop the ingester.** The write ran inside the reconnect loop's `try`, so an `OSError` from it read as a connection failure, and the second write, in the `except`, ended the loop. Every JSON-line file now goes through one helper, `shared/jsonl.py`, and a failed connection-event write logs a warning. With `data/metrics` replaced by a plain file, the ingester logged the warnings through a 10 s reset and kept landing trades.
+
+The report rerun on this session's data, with `7ca47c6`:
+
+```
+Late-event rate: Silver 0 of 6146 trades behind its watermark (0.00%). Gold had too-late trades in 0 windows, a count of windows, not trades.
+Candle finality delay: median 90.3 s, p95 147.3 s, max 192.2 s over 34 candles.
+```
+
+Every other line printed the same numbers, with "micro-batches" in place of "batches".
 
 ## Findings
 
-- **The candle finality delay is about 74 s.** Gold's watermark lag has a median of 73.6 s and a 95th percentile of 133.8 s. Its maximum, 195.1 s, came during the reset, when no newer trade could move the watermark.
+- **Candles became final a median 90 s after their minute.** Measured from Gold's commit times, the delay ran from 74.2 s to 192.1 s, with a 95th percentile of 147.2 s. The longest was 02:17's, which waited through the reset, when no newer trade could move the watermark.
 - **A 63.6 s outage lost 90 trades; a 13.3 s one lost none.** A snapshot is always 50 trades, which reached back 29 and 30 s after the two outages at this session's pace. The reconnect count alone does not tell the two apart; the gap count does.
-- **Batches take a few seconds.** The median is 1.5 s for Bronze and 2.7 s for Gold. The 95th percentiles run from 5.2 s to 8.3 s, and the longest batch took 9.4 s, in the rejects query.
+- **Micro-batches take a few seconds.** The median is 1.5 s for Bronze and 2.7 s for Gold. The 95th percentiles run from 5.2 s to 8.3 s, and the longest micro-batch took 9.4 s, in the rejects query.
 - **The disk holds two kinds of file the snapshot does not.** The files compaction replaced, kept for time travel, and the empty files no commit added. Only a `VACUUM` removes either.
 
 ## Left for later
@@ -307,5 +324,6 @@ The late-data policy is cp3's, unchanged: a 1-minute watermark, each candle appe
 - **Gap recovery.** As in cp3, a backfill from Kraken's REST trades would reach Gold too late for candles already final.
 - **Volume comparisons.** `docs/scope.md` asks for Gold metrics "such as VWAP and volume comparisons"; volume is checked against Kraken's every minute, and no other volume metric is built.
 - **The checks' timing.** They assume the processor has stopped and every query has read the same Bronze. Nothing checks it.
+- **A failed query's shutdown.** When a query fails, the processor exits with its error without stopping the other queries or the Spark session first. Only a SIGTERM or a query that ends without an error takes the clean path.
 - **One session per `data/`.** As in cp3; this session started from an empty `data/`.
 - **Tests.** `tests/` still holds no file.
