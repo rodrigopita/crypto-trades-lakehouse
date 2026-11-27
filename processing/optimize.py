@@ -1,6 +1,4 @@
-import json
 import logging
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -9,6 +7,7 @@ from pyspark.sql import SparkSession
 
 from processing import gold, silver
 from processing.settings import ProcessingSettings
+from shared.jsonl import append_jsonl
 from shared.logs import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -34,12 +33,6 @@ def compact(spark: SparkSession, table_path: str) -> dict:
     return {"files_removed": metrics.numFilesRemoved, "files_added": metrics.numFilesAdded}
 
 
-def append_result(metrics_path: str, result: dict) -> None:
-    os.makedirs(os.path.dirname(metrics_path), exist_ok=True)
-    with open(metrics_path, "a") as f:
-        f.write(json.dumps(result) + "\n")
-
-
 def main():
     configure_logging()
     settings = ProcessingSettings()
@@ -59,7 +52,7 @@ def main():
             f"{compaction['files_removed']} removed, {compaction['files_added']} added, "
             f"{before['size_in_bytes']} -> {after['size_in_bytes']} bytes."
         )
-        append_result(
+        append_jsonl(
             settings.optimize_metrics_path(),
             {"ran_at": ran_at, "table": f"{layer}/{table}", "before": before, "after": after}
             | compaction,

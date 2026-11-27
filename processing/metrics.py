@@ -1,7 +1,9 @@
+import json
 import logging
-import os
 
 from pyspark.sql.streaming import StreamingQueryListener
+
+from shared.jsonl import append_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -12,15 +14,12 @@ class Listener(StreamingQueryListener):
         self.name_by_id = {}
         self.metrics_path = metrics_path
 
-        os.makedirs(os.path.dirname(metrics_path), exist_ok=True)
-
     def onQueryStarted(self, event):
         self.name_by_id[event.id] = event.name
         logger.info(f"Query started: {event.name}")
 
     def onQueryProgress(self, event):
-        with open(self.metrics_path, "a") as f:
-            f.write(event.progress.json + "\n")
+        append_jsonl(self.metrics_path, json.loads(event.progress.json))
 
     def onQueryTerminated(self, event):
         if not event.exception:

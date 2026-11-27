@@ -4,6 +4,8 @@ import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
+from shared.jsonl import append_jsonl
+
 Clock = Callable[[], datetime]
 logger = logging.getLogger(__name__)
 
@@ -113,7 +115,6 @@ def log_written_record(
         "min_trade_id": min(trade_ids, default=None),
         "max_trade_id": max(trade_ids, default=None),
     }
-    with open(record_path, "a") as f:
-        f.write(json.dumps(written_record) + "\n")
+    append_jsonl(record_path, written_record)
     logger.debug(f"Logged written record to {record_path}: {written_record}.")
     return written_record
